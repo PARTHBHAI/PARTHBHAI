@@ -6,85 +6,72 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const GEMINI_KEY = process.env.GEMINI_API_KEY;
 
-// Middleware
-app.use(cors()); // Allows your HTML file to communicate with this server
-app.use(express.json({ limit: '10mb' })); // Increased limit to allow image uploads
+// 🛡️ CORS Config
+app.use(cors({ origin: '*', methods: ['GET', 'POST', 'OPTIONS'], allowedHeaders: ['Content-Type', 'Authorization'] }));
+app.options('*', cors());
+app.use(express.json({ limit: '10mb' })); 
 
-// API Route
 app.post('/api/solve', async (req, res) => {
     const { text, image, language } = req.body;
 
-    // Security check
-    if (!GEMINI_KEY) {
-        console.error("Missing API Key!");
-        return res.status(500).json({ raw: "Server Error: API Key not configured on Render." });
-    }
+    if (!GEMINI_KEY) return res.status(500).json({ raw: "Server Error: API Key not configured on Render." });
 
     try {
         const prompt = `You are an expert math tutor. Solve this step-by-step.
         Language: ${language === 'hi' ? 'Hindi' : 'English'}.
         
-        IMPORTANT: Return ONLY a valid JSON object. No markdown formatting or extra text.
+        CRITICAL INSTRUCTION: Return ONLY a raw JSON object. NO markdown, NO \`\`\`json, NO text outside the JSON. 
+        Do NOT use literal newlines (\\n) inside the JSON string values.
+        
         Structure:
         {
             "steps": [
-                { "title": "Step Title", "math": "Latex equation without $ signs", "desc": "Explanation" }
+                { "title": "Step Title", "math": "Latex equation without $ signs", "desc": "Explanation with inline math wrapped in $ signs" }
             ]
         }
         
         Problem: ${text || "Solve the math problem in the image."}`;
 
-        const payload = {
-            contents: [{
-                parts: [{ text: prompt }]
-            }]
-        };
+        const payload = { contents: [{ parts: [{ text: prompt }] }] };
 
-        // Attach image if the user uploaded one
-        if (image) {
-            payload.contents[0].parts.push({
-                inline_data: { mime_type: "image/jpeg", data: image }
-            });
-        }
+        if (image) payload.contents[0].parts.push({ inline_data: { mime_type: "image/jpeg", data: image } });
 
-        // Call Google Gemini (Using Node 18+ native fetch)
-        const apiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
+        const apiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
         });
 
         const data = await apiRes.json();
         
-        // 🛡️ NEW: CATCH RATE LIMIT ERRORS
+        // Catch 429 Rate Limits
         if (data.error && data.error.code === 429) {
-            console.warn("RATE LIMIT HIT:", data.error.message);
-            // Extract the seconds from "Please retry in 40.6s."
             const match = data.error.message.match(/retry in ([\d\.]+)s/i);
-            const waitSeconds = match ? Math.ceil(parseFloat(match[1])) : 60; // Default to 60s if not found
-            
-            return res.status(429).json({ 
-                rate_limit: true, 
-                retry_in: waitSeconds, 
-                raw: "SYSTEM OVERLOAD: AI Core cooling down." 
-            });
+            return res.status(429).json({ rate_limit: true, retry_in: match ? Math.ceil(parseFloat(match[1])) : 45, raw: "AI Core cooling down." });
         }
 
-        if (!data.candidates) {
-            console.error("Gemini API Error:", data);
-            return res.status(500).json({ raw: "AI could not process this request." });
-        }
+        if (!data.candidates) return res.json({ raw: "AI could not process this request." });
 
         let rawText = data.candidates[0].content.parts[0].text;
-        rawText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
 
-        try {
-            const json = JSON.parse(rawText);
-            res.json(json);
-        } catch (e) {
-            // If AI didn't return perfect JSON, send back the raw text
-            res.json({ raw: rawText });
+        // ==========================================
+        // 🛠️ BULLETPROOF JSON EXTRACTOR
+        // ==========================================
+        const firstBrace = rawText.indexOf('{');
+        const lastBrace = rawText.lastIndexOf('}');
+        
+        if (firstBrace !== -1 && lastBrace !== -1) {
+            let jsonStr = rawText.substring(firstBrace, lastBrace + 1);
+            // Remove raw newlines that break JSON.parse
+            jsonStr = jsonStr.replace(/[\n\r]/g, ' '); 
+            
+            try {
+                return res.json(JSON.parse(jsonStr));
+            } catch (e) {
+                console.error("JSON Parse Error:", e);
+                // Fall through to raw output if it still fails
+            }
         }
+        
+        res.json({ raw: rawText });
 
     } catch (error) {
         console.error("Server Crash:", error);
@@ -92,7 +79,4 @@ app.post('/api/solve', async (req, res) => {
     }
 });
 
-// Start the server
-app.listen(PORT, () => {
-    console.log(`🚀 Nebula Backend running on port ${PORT}`);
-});
+app.listen(PORT, () => console.log(`🚀 Nebula Backend running on port ${PORT}`));
