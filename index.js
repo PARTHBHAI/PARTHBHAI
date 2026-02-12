@@ -36,7 +36,7 @@ app.post('/api/solve', async (req, res) => {
 
         if (image) payload.contents[0].parts.push({ inline_data: { mime_type: "image/jpeg", data: image } });
 
-        const apiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`, {
+        const apiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
         });
 
