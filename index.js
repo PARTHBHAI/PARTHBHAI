@@ -48,7 +48,7 @@ app.post('/api/solve', async (req, res) => {
         }
 
         // Call Google Gemini (Using Node 18+ native fetch)
-        const apiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`, {
+        const apiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
@@ -56,12 +56,25 @@ app.post('/api/solve', async (req, res) => {
 
         const data = await apiRes.json();
         
-        if (!data.candidates) {
-            console.error("Gemini API Error:", data);
-            return res.json({ raw: "AI could not process this request. Ensure the image is clear or the problem is valid." });
+        // 🛡️ NEW: CATCH RATE LIMIT ERRORS
+        if (data.error && data.error.code === 429) {
+            console.warn("RATE LIMIT HIT:", data.error.message);
+            // Extract the seconds from "Please retry in 40.6s."
+            const match = data.error.message.match(/retry in ([\d\.]+)s/i);
+            const waitSeconds = match ? Math.ceil(parseFloat(match[1])) : 60; // Default to 60s if not found
+            
+            return res.status(429).json({ 
+                rate_limit: true, 
+                retry_in: waitSeconds, 
+                raw: "SYSTEM OVERLOAD: AI Core cooling down." 
+            });
         }
 
-        // Clean up the response to ensure it's pure JSON
+        if (!data.candidates) {
+            console.error("Gemini API Error:", data);
+            return res.status(500).json({ raw: "AI could not process this request." });
+        }
+
         let rawText = data.candidates[0].content.parts[0].text;
         rawText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
 
