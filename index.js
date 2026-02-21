@@ -17,27 +17,56 @@ app.post('/api/solve', async (req, res) => {
     if (!GEMINI_KEY) return res.status(500).json({ raw: "Server Error: API Key not configured on Render." });
 
     try {
-        const prompt = `You are an expert math tutor. Solve this step-by-step.
-        Language: ${language === 'hi' ? 'Hindi' : 'English'}.
+        // ==========================================
+        // 🧠 ADVANCED PROMPT ENGINEERING
+        // ==========================================
+        const langInstruction = language === 'hi' ? 'Hinglish (a simple, easy-to-understand mix of Hindi and English)' : 'Very simple, easy-to-understand English';
         
-        CRITICAL INSTRUCTION: Return ONLY a raw JSON object. NO markdown, NO \`\`\`json, NO text outside the JSON. 
-        Do NOT use literal newlines (\\n) inside the JSON string values.
+        const prompt = `You are an expert CBSE Board (10th & 12th Standard) Math Tutor. 
+        Your goal is to explain concepts so simply that any student can understand them.
+        Language to use: ${langInstruction}.
         
-        Structure:
+        CRITICAL FORMATTING INSTRUCTIONS:
+        You must solve the problem strictly following the CBSE step-by-step marking pattern:
+        1. "Given / Let": What information is provided.
+        2. "Formula Used": The exact mathematical formulas needed.
+        3. "Implementation": The step-by-step calculation with clear reasoning.
+        4. "Final Answer": The final conclusion.
+
+        EXTRA FEATURES TO INCLUDE (If applicable):
+        - Graphs: If the problem involves functions, geometry, or calculus, explain the graph shape, key coordinates (x,y intercepts), or use simple ASCII art to represent it.
+        - Tables: Use Markdown tables if comparing values or listing data points.
+        - Video Links: Include a relevant YouTube search link at the end of the explanation using Markdown (e.g., [Watch Concept Video on YouTube](https://www.youtube.com/results?search_query=concept+name)).
+
+        JSON STRUCTURE REQUIREMENT:
         {
             "steps": [
-                { "title": "Step Title", "math": "Latex equation without $ signs", "desc": "Explanation with inline math wrapped in $ signs" }
+                { 
+                    "title": "Step Title (e.g., Given, Formula, Step 1, Final Answer)", 
+                    "math": "Latex equation without $ signs (leave empty if none)", 
+                    "desc": "Detailed explanation in ${langInstruction}. Use inline math wrapped in $ signs. Include Markdown links or tables here." 
+                }
             ]
         }
         
-        Problem: ${text || "Solve the math problem in the image."}`;
+        Problem: ${text || "Solve the math problem shown in the attached image."}`;
 
-        const payload = { contents: [{ parts: [{ text: prompt }] }] };
+        // Payload with Native JSON response config to prevent parsing crashes
+        const payload = { 
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+                responseMimeType: "application/json"
+            }
+        };
 
-        if (image) payload.contents[0].parts.push({ inline_data: { mime_type: "image/jpeg", data: image } });
+        if (image) {
+            payload.contents[0].parts.push({ inline_data: { mime_type: "image/jpeg", data: image } });
+        }
 
         const apiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' }, 
+            body: JSON.stringify(payload)
         });
 
         const data = await apiRes.json();
@@ -50,28 +79,20 @@ app.post('/api/solve', async (req, res) => {
 
         if (!data.candidates) return res.json({ raw: "AI could not process this request." });
 
-        let rawText = data.candidates[0].content.parts[0].text;
+        const rawText = data.candidates[0].content.parts[0].text;
 
         // ==========================================
-        // 🛠️ BULLETPROOF JSON EXTRACTOR
+        // 🛠️ PARSE RESPONSE
         // ==========================================
-        const firstBrace = rawText.indexOf('{');
-        const lastBrace = rawText.lastIndexOf('}');
-        
-        if (firstBrace !== -1 && lastBrace !== -1) {
-            let jsonStr = rawText.substring(firstBrace, lastBrace + 1);
-            // Remove raw newlines that break JSON.parse
-            jsonStr = jsonStr.replace(/[\n\r]/g, ' '); 
-            
-            try {
-                return res.json(JSON.parse(jsonStr));
-            } catch (e) {
-                console.error("JSON Parse Error:", e);
-                // Fall through to raw output if it still fails
-            }
+        try {
+            // Because we used responseMimeType: "application/json", it should be perfectly parseable.
+            const jsonResponse = JSON.parse(rawText);
+            return res.json(jsonResponse);
+        } catch (e) {
+            console.error("JSON Parse Error:", e);
+            // Fallback just in case
+            res.json({ raw: rawText });
         }
-        
-        res.json({ raw: rawText });
 
     } catch (error) {
         console.error("Server Crash:", error);
