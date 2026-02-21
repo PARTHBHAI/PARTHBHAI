@@ -20,31 +20,36 @@ app.post('/api/solve', async (req, res) => {
         // ==========================================
         // 🧠 ADVANCED PROMPT ENGINEERING
         // ==========================================
-        const langInstruction = language === 'hi' ? 'Hinglish (a simple, easy-to-understand mix of Hindi and English)' : 'Very simple, easy-to-understand English';
+        const langInstruction = language === 'hi' 
+            ? 'Hinglish (A very simple mix of Hindi and English. Translate explanations directly to Hinglish.)' 
+            : 'Very simple, easy-to-understand English';
         
         const prompt = `You are an expert CBSE Board (10th & 12th Standard) Math Tutor. 
         Your goal is to explain concepts so simply that any student can understand them.
         Language to use: ${langInstruction}.
         
         CRITICAL FORMATTING INSTRUCTIONS:
-        You must solve the problem strictly following the CBSE step-by-step marking pattern:
+        You must solve the problem strictly following the CBSE step-by-step marking pattern. Break it down into these exact logical steps:
         1. "Given / Let": What information is provided.
         2. "Formula Used": The exact mathematical formulas needed.
-        3. "Implementation": The step-by-step calculation with clear reasoning.
+        3. "Implementation / Steps": The step-by-step calculation with clear reasoning.
         4. "Final Answer": The final conclusion.
 
-        EXTRA FEATURES TO INCLUDE (If applicable):
-        - Graphs: If the problem involves functions, geometry, or calculus, explain the graph shape, key coordinates (x,y intercepts), or use simple ASCII art to represent it.
-        - Tables: Use Markdown tables if comparing values or listing data points.
-        - Video Links: Include a relevant YouTube search link at the end of the explanation using Markdown (e.g., [Watch Concept Video on YouTube](https://www.youtube.com/results?search_query=concept+name)).
+        GRAPH AND TABLE INSTRUCTIONS:
+        - Graphs: If the problem involves functions, geometry, coordinates, or calculus, provide a text-based ASCII graph. You MUST wrap the ASCII graph inside triple backticks like this:
+          \`\`\`text
+          [Draw your ASCII graph here]
+          \`\`\`
+        - Tables: If data needs to be structured, use Markdown tables.
+        - Video Links: Include a relevant YouTube search link at the end of the explanation using Markdown (e.g., [Watch Concept Video on YouTube](https://www.youtube.com/results?search_query=topic)).
 
         JSON STRUCTURE REQUIREMENT:
         {
             "steps": [
                 { 
-                    "title": "Step Title (e.g., Given, Formula, Step 1, Final Answer)", 
+                    "title": "Step Title (e.g., Given, Formula, Implementation, Final Answer)", 
                     "math": "Latex equation without $ signs (leave empty if none)", 
-                    "desc": "Detailed explanation in ${langInstruction}. Use inline math wrapped in $ signs. Include Markdown links or tables here." 
+                    "desc": "Detailed explanation in ${langInstruction}. Use inline math wrapped in $ signs. Put Markdown tables or \`\`\`text ASCII graphs \`\`\` here." 
                 }
             ]
         }
@@ -85,12 +90,10 @@ app.post('/api/solve', async (req, res) => {
         // 🛠️ PARSE RESPONSE
         // ==========================================
         try {
-            // Because we used responseMimeType: "application/json", it should be perfectly parseable.
             const jsonResponse = JSON.parse(rawText);
             return res.json(jsonResponse);
         } catch (e) {
             console.error("JSON Parse Error:", e);
-            // Fallback just in case
             res.json({ raw: rawText });
         }
 
