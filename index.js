@@ -17,46 +17,48 @@ app.post('/api/solve', async (req, res) => {
     if (!GEMINI_KEY) return res.status(500).json({ raw: "Server Error: API Key not configured on Render." });
 
     try {
-        // ==========================================
-        // 🧠 ADVANCED PROMPT ENGINEERING
-        // ==========================================
+        // --- STRICT HINGLISH RULE ADDED ---
         const langInstruction = language === 'hi' 
-            ? 'Hinglish (A very simple mix of Hindi and English. Translate explanations directly to Hinglish.)' 
+            ? 'Hinglish (Hindi written STRICTLY in the English alphabet. Example: "Ye ek formula hai". DO NOT use Devanagari script.)' 
             : 'Very simple, easy-to-understand English';
         
+        // --- 🛠️ THE PROMPT FIX: Double Escaping Demanded ---
         const prompt = `You are an expert CBSE Board (10th & 12th Standard) Math Tutor. 
         Your goal is to explain concepts so simply that any student can understand them.
         Language to use: ${langInstruction}.
         
+        CRITICAL JSON & LATEX RULES (MUST FOLLOW OR SYSTEM CRASHES):
+        1. You MUST double-escape ALL LaTeX backslashes inside strings. 
+           - Write \\\\frac instead of \\frac
+           - Write \\\\times instead of \\times
+           - Write \\\\sin instead of \\sin
+           - Write \\\\n for newlines, NOT actual newlines.
+        2. DO NOT wrap the output in markdown \`\`\`json blocks. Return raw JSON text only.
+        
         CRITICAL FORMATTING INSTRUCTIONS:
-        You must solve the problem strictly following the CBSE step-by-step marking pattern. Break it down into these exact logical steps:
+        You must solve the problem strictly following the CBSE step-by-step marking pattern:
         1. "Given / Let": What information is provided.
         2. "Formula Used": The exact mathematical formulas needed.
-        3. "Implementation / Steps": The step-by-step calculation with clear reasoning.
+        3. "Implementation / Steps": The step-by-step calculation.
         4. "Final Answer": The final conclusion.
 
         GRAPH AND TABLE INSTRUCTIONS:
-        - Graphs: If the problem involves functions, geometry, coordinates, or calculus, provide a text-based ASCII graph. You MUST wrap the ASCII graph inside triple backticks like this:
-          \`\`\`text
-          [Draw your ASCII graph here]
-          \`\`\`
-        - Tables: If data needs to be structured, use Markdown tables.
-        - Video Links: Include a relevant YouTube search link at the end of the explanation using Markdown (e.g., [Watch Concept Video on YouTube](https://www.youtube.com/results?search_query=topic)).
+        - Graphs: If needed, provide a text-based ASCII graph. Wrap it inside triple backticks like this: \`\`\`text [graph] \`\`\`
+        - Tables: Use Markdown tables if needed.
 
         JSON STRUCTURE REQUIREMENT:
         {
             "steps": [
                 { 
-                    "title": "Step Title (e.g., Given, Formula, Implementation, Final Answer)", 
-                    "math": "Latex equation without $ signs (leave empty if none)", 
-                    "desc": "Detailed explanation in ${langInstruction}. Use inline math wrapped in $ signs. Put Markdown tables or \`\`\`text ASCII graphs \`\`\` here." 
+                    "title": "Step Title", 
+                    "math": "Latex equation here (double escaped, no $ signs)", 
+                    "desc": "Detailed explanation. Use inline math wrapped in $ signs (e.g., $\\\\cos A$). Put ASCII graphs here." 
                 }
             ]
         }
         
         Problem: ${text || "Solve the math problem shown in the attached image."}`;
 
-        // Payload with Native JSON response config to prevent parsing crashes
         const payload = { 
             contents: [{ parts: [{ text: prompt }] }],
             generationConfig: {
@@ -76,7 +78,6 @@ app.post('/api/solve', async (req, res) => {
 
         const data = await apiRes.json();
         
-        // Catch 429 Rate Limits
         if (data.error && data.error.code === 429) {
             const match = data.error.message.match(/retry in ([\d\.]+)s/i);
             return res.status(429).json({ rate_limit: true, retry_in: match ? Math.ceil(parseFloat(match[1])) : 45, raw: "AI Core cooling down." });
@@ -84,16 +85,20 @@ app.post('/api/solve', async (req, res) => {
 
         if (!data.candidates) return res.json({ raw: "AI could not process this request." });
 
-        const rawText = data.candidates[0].content.parts[0].text;
+        let rawText = data.candidates[0].content.parts[0].text;
 
         // ==========================================
-        // 🛠️ PARSE RESPONSE
+        // 🛠️ THE PARSING FIX: Strip Markdown from JSON
         // ==========================================
+        // Gemini sometimes adds ```json to the start of the text, which breaks JSON.parse
+        rawText = rawText.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
+
         try {
             const jsonResponse = JSON.parse(rawText);
             return res.json(jsonResponse);
         } catch (e) {
             console.error("JSON Parse Error:", e);
+            console.error("Raw Text Received:", rawText); // Logs to Render console for debugging
             res.json({ raw: rawText });
         }
 
