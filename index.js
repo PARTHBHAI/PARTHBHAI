@@ -27,7 +27,7 @@ app.post('/api/solve', async (req, res) => {
         CRITICAL MATH FORMATTING RULES:
         1. "desc" field: EVERY SINGLE mathematical variable, fraction, or equation MUST be wrapped in $ signs (inline) or $$ signs (standalone). 
         2. "math" field: DO NOT use $ signs here. Provide pure LaTeX. If the equation has multiple lines, you MUST wrap it in \\begin{aligned} ... \\end{aligned}.
-        3. ASCII Graphs: If you draw an ASCII graph, it MUST be wrapped inside \`\`\`text ... \`\`\` code blocks.
+        3. ASCII Graphs vs Tables: ONLY use \`\`\`text ... \`\`\` blocks for drawing visual x-y coordinate geometry plots. For the ASTC rule, quadrant grids, or standard text data, YOU MUST use standard Markdown tables. NEVER put markdown lists or textual rules inside \`\`\`text blocks.
         4. Tables: Use standard Markdown tables.
 
         CBSE FORMATTING STEPS:
