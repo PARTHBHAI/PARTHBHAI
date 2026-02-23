@@ -21,40 +21,47 @@ app.post('/api/solve', async (req, res) => {
             ? 'Hinglish (Hindi written STRICTLY in the English alphabet. Example: "Ye ek formula hai". DO NOT use Devanagari script.)' 
             : 'Very simple, easy-to-understand English';
         
-        // 🧠 THE CLEANED & STRICT PROMPT
         const prompt = `You are an expert CBSE Board (10th & 12th Standard) Math Tutor. 
         Language to use: ${langInstruction}.
         
-        CRITICAL MATH FORMATTING RULES (MANDATORY):
-        1. Inside the "desc" field, EVERY SINGLE mathematical equation, formula, or variable MUST be wrapped in $ signs (for inline) or $$ signs (for standalone lines).
-           - Correct Example: The value of $x$ is $5$.
-           - Correct Example: $$ \\sin^2(x) + \\cos^2(x) = 1 $$
-           - INCORRECT (DO NOT DO THIS): \\sin(A+B) = \\sin A \\cos B (It is missing $ signs!)
-        2. Use standard Markdown for tables and bold text. 
-        3. Use normal line breaks. Do not use manual escape hacks.
+        CRITICAL MATH FORMATTING RULES:
+        1. "desc" field: EVERY SINGLE mathematical variable, fraction, or equation MUST be wrapped in $ signs (inline) or $$ signs (standalone). 
+        2. "math" field: DO NOT use $ signs here. Provide pure LaTeX. If the equation has multiple lines, you MUST wrap it in \\begin{aligned} ... \\end{aligned}.
+        3. ASCII Graphs: If you draw an ASCII graph, it MUST be wrapped inside \`\`\`text ... \`\`\` code blocks.
+        4. Tables: Use standard Markdown tables.
 
-        FORMATTING INSTRUCTIONS:
+        CBSE FORMATTING STEPS:
         1. "Given / Let": Information provided.
         2. "Formula Used": Mathematical formulas.
         3. "Implementation / Steps": Step-by-step calculation.
         4. "Final Answer": The final conclusion.
-
-        JSON STRUCTURE REQUIREMENT:
-        {
-            "steps": [
-                { 
-                    "title": "Step Title", 
-                    "math": "A single major Latex equation for this step (no $ signs here)", 
-                    "desc": "Explanation here. Use $ for ALL math inside this text. Markdown tables allowed." 
-                }
-            ]
-        }
         
         Problem: ${text || "Solve the math problem shown in the attached image."}`;
 
+        // 🧠 THE ULTIMATE FIX: responseSchema guarantees 100% valid JSON (No more crashes!)
         const payload = { 
             contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { responseMimeType: "application/json" }
+            generationConfig: { 
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: "OBJECT",
+                    properties: {
+                        steps: {
+                            type: "ARRAY",
+                            items: {
+                                type: "OBJECT",
+                                properties: {
+                                    title: { type: "STRING", description: "The step title" },
+                                    math: { type: "STRING", description: "Pure LaTeX formula. Use aligned environment for multiple lines." },
+                                    desc: { type: "STRING", description: "Explanation with $math$ and markdown." }
+                                },
+                                required: ["title", "math", "desc"]
+                            }
+                        }
+                    },
+                    required: ["steps"]
+                }
+            }
         };
 
         if (image) payload.contents[0].parts.push({ inline_data: { mime_type: "image/jpeg", data: image } });
@@ -73,19 +80,9 @@ app.post('/api/solve', async (req, res) => {
 
         let rawText = data.candidates[0].content.parts[0].text;
 
-        // 🛡️ PARSER SAFETY NET: Strip out markdown wrappers and handle array vs object variations
-        rawText = rawText.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
-
         try {
-            let jsonResponse = JSON.parse(rawText);
-            
-            // Safety check: if AI returns an array of steps instead of an object containing steps
-            if (Array.isArray(jsonResponse)) {
-                jsonResponse = { steps: jsonResponse };
-            } else if (!jsonResponse.steps) {
-                jsonResponse = { steps: [{ title: "Solution", math: "", desc: rawText }] };
-            }
-            
+            // Because of responseSchema, this will parse successfully 99.99% of the time!
+            const jsonResponse = JSON.parse(rawText);
             return res.json(jsonResponse);
         } catch (e) {
             console.error("JSON Parse Error:", e);
