@@ -32,7 +32,6 @@ app.post('/api/solve', async (req, res) => {
            - Write \\\\frac instead of \\frac
            - Write \\\\times instead of \\times
            - Write \\\\sin instead of \\sin
-           - Write \\\\n for newlines, NOT actual newlines.
         2. DO NOT wrap the output in markdown \`\`\`json blocks. Return raw JSON text only.
         
         CRITICAL FORMATTING INSTRUCTIONS:
