@@ -21,18 +21,17 @@ app.post('/api/solve', async (req, res) => {
             ? 'Hinglish (Hindi written STRICTLY in the English alphabet. Example: "Ye ek formula hai". DO NOT use Devanagari script.)' 
             : 'Very simple, easy-to-understand English';
         
-        // 🧠 THE ULTIMATE PROMPT FIX
+        // 🧠 THE CLEANED & STRICT PROMPT
         const prompt = `You are an expert CBSE Board (10th & 12th Standard) Math Tutor. 
         Language to use: ${langInstruction}.
         
-        CRITICAL JSON & LATEX ESCAPING RULES (MANDATORY):
-        1. You are generating JSON. Every single LaTeX backslash MUST be double-escaped. 
-           - Write \\\\frac instead of \\frac
-           - Write \\\\sin instead of \\sin
-           - Write \\\\pi instead of \\pi
-           - Write \\\\theta instead of \\theta
-        2. DO NOT use \\n or \\\\n for line breaks. If you need a line break in a math equation or text description, use the exact word [NEWLINE].
-        3. DO NOT use LaTeX like \\text{} in the description field. Use standard Markdown tables for charts (like the ASTC rule) and ASCII for graphs.
+        CRITICAL MATH FORMATTING RULES (MANDATORY):
+        1. Inside the "desc" field, EVERY SINGLE mathematical equation, formula, or variable MUST be wrapped in $ signs (for inline) or $$ signs (for standalone lines).
+           - Correct Example: The value of $x$ is $5$.
+           - Correct Example: $$ \\sin^2(x) + \\cos^2(x) = 1 $$
+           - INCORRECT (DO NOT DO THIS): \\sin(A+B) = \\sin A \\cos B (It is missing $ signs!)
+        2. Use standard Markdown for tables and bold text. 
+        3. Use normal line breaks. Do not use manual escape hacks.
 
         FORMATTING INSTRUCTIONS:
         1. "Given / Let": Information provided.
@@ -45,8 +44,8 @@ app.post('/api/solve', async (req, res) => {
             "steps": [
                 { 
                     "title": "Step Title", 
-                    "math": "Latex equation here (double escaped, use [NEWLINE] for line breaks)", 
-                    "desc": "Explanation here. Use [NEWLINE] for line breaks. Markdown tables allowed." 
+                    "math": "A single major Latex equation for this step (no $ signs here)", 
+                    "desc": "Explanation here. Use $ for ALL math inside this text. Markdown tables allowed." 
                 }
             ]
         }
@@ -73,12 +72,20 @@ app.post('/api/solve', async (req, res) => {
         if (!data.candidates) return res.json({ raw: "AI could not process this request." });
 
         let rawText = data.candidates[0].content.parts[0].text;
-        
-        // 🛡️ PRE-PARSER SAFETY NET: Strip out any markdown wrapper Gemini tries to add
+
+        // 🛡️ PARSER SAFETY NET: Strip out markdown wrappers and handle array vs object variations
         rawText = rawText.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
 
         try {
-            const jsonResponse = JSON.parse(rawText);
+            let jsonResponse = JSON.parse(rawText);
+            
+            // Safety check: if AI returns an array of steps instead of an object containing steps
+            if (Array.isArray(jsonResponse)) {
+                jsonResponse = { steps: jsonResponse };
+            } else if (!jsonResponse.steps) {
+                jsonResponse = { steps: [{ title: "Solution", math: "", desc: rawText }] };
+            }
+            
             return res.json(jsonResponse);
         } catch (e) {
             console.error("JSON Parse Error:", e);
