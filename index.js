@@ -4,7 +4,21 @@ const cors = require('cors');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const GEMINI_KEY = process.env.GEMINI_API_KEY;
+
+// 1. Fetch the comma-separated keys and turn them into an array
+const MATH_KEYS = process.env.MATH_API_KEYS ? process.env.MATH_API_KEYS.split(',') : [];
+
+// 2. Variable to keep track of whose turn it is
+let currentMathKeyIndex = 0;
+
+// 3. Function to get the next key (Round-Robin Rotation)
+function getNextMathKey() {
+    if (MATH_KEYS.length === 0) return null;
+    const key = MATH_KEYS[currentMathKeyIndex];
+    // Move to the next key, and loop back to 0 if we reach the end
+    currentMathKeyIndex = (currentMathKeyIndex + 1) % MATH_KEYS.length;
+    return key;
+}
 
 // 🛡️ CORS Config
 app.use(cors({ origin: '*', methods: ['GET', 'POST', 'OPTIONS'], allowedHeaders: ['Content-Type', 'Authorization'] }));
@@ -14,7 +28,10 @@ app.use(express.json({ limit: '10mb' }));
 app.post('/api/solve', async (req, res) => {
     const { text, image, language } = req.body;
 
-    if (!GEMINI_KEY) return res.status(500).json({ raw: "Server Error: API Key not configured on Render." });
+    // 🔑 GRAB THE NEXT AVAILABLE KEY
+    const ACTIVE_KEY = getNextMathKey();
+
+    if (!ACTIVE_KEY) return res.status(500).json({ raw: "Server Error: No API Keys configured on Render." });
 
     try {
         const langInstruction = language === 'hi' 
@@ -28,7 +45,6 @@ app.post('/api/solve', async (req, res) => {
         1. "desc" field: EVERY SINGLE mathematical variable, fraction, or equation MUST be wrapped in $ signs (inline) or $$ signs (standalone). 
         2. "math" field: DO NOT use $ signs here. Provide pure LaTeX. If the equation has multiple lines, you MUST wrap it in \\begin{aligned} ... \\end{aligned}.
         3. ASCII Graphs vs Tables: ONLY use \`\`\`text ... \`\`\` blocks for drawing visual x-y coordinate geometry plots. For the ASTC rule, quadrant grids, or standard text data, YOU MUST use standard Markdown tables. NEVER put markdown lists or textual rules inside \`\`\`text blocks.
-        4. Tables: Use standard Markdown tables.
 
         CBSE FORMATTING STEPS:
         1. "Given / Let": Information provided.
@@ -38,7 +54,6 @@ app.post('/api/solve', async (req, res) => {
         
         Problem: ${text || "Solve the math problem shown in the attached image."}`;
 
-        // 🧠 THE ULTIMATE FIX: responseSchema guarantees 100% valid JSON (No more crashes!)
         const payload = { 
             contents: [{ parts: [{ text: prompt }] }],
             generationConfig: { 
@@ -66,7 +81,8 @@ app.post('/api/solve', async (req, res) => {
 
         if (image) payload.contents[0].parts.push({ inline_data: { mime_type: "image/jpeg", data: image } });
 
-        const apiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`, {
+        // Use the ACTIVE_KEY that was randomly selected for this specific request
+        const apiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${ACTIVE_KEY}`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
         });
 
@@ -81,7 +97,6 @@ app.post('/api/solve', async (req, res) => {
         let rawText = data.candidates[0].content.parts[0].text;
 
         try {
-            // Because of responseSchema, this will parse successfully 99.99% of the time!
             const jsonResponse = JSON.parse(rawText);
             return res.json(jsonResponse);
         } catch (e) {
@@ -95,4 +110,4 @@ app.post('/api/solve', async (req, res) => {
     }
 });
 
-app.listen(PORT, () => console.log(`🚀 MathAI Backend running on port ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 SpaceTech Backend running on port ${PORT} with ${MATH_KEYS.length} Math Keys active.`));
