@@ -45,6 +45,7 @@ app.post('/api/solve', async (req, res) => {
         1. "desc" field: EVERY SINGLE mathematical variable, fraction, or equation MUST be wrapped in $ signs (inline) or $$ signs (standalone). 
         2. "math" field: DO NOT use $ signs here. Provide pure LaTeX. If the equation has multiple lines, you MUST wrap it in \\begin{aligned} ... \\end{aligned}.
         3. ASCII Graphs vs Tables: ONLY use \`\`\`text ... \`\`\` blocks for drawing visual x-y coordinate geometry plots. For the ASTC rule, quadrant grids, or standard text data, YOU MUST use standard Markdown tables. NEVER put markdown lists or textual rules inside \`\`\`text blocks.
+        4. SET THEORY BRACES: To display literal curly braces (like for an empty set or listing elements), you MUST double-escape them. Example: $\\\\{a, b, c\\\\}$ or $\\\\{\\\\}$. NEVER use bare {} inside $ signs.
 
         CBSE FORMATTING STEPS:
         1. "Given / Let": Information provided.
